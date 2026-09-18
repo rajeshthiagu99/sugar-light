@@ -1,0 +1,13 @@
+# Play Console checklist
+- Confirm product name, servingCostage name, support email and privacy-policy URL.
+- Create app in Play Console and accept Play App Signing.
+- Create subscription products sugar_light_monthly, India price ₹199/month, and a 3-day free trial offer, and test license accounts.
+- Replace draft Android applicationId only if needed; generate upload keystore; store secrets outside source; configure release signing.
+- Build signed AAB and upload to internal testing first.
+- Supply icon 512x512, feature graphic 1024x500, phone screenshots, title, short and full descriptions, app category Health & Fitness, contact details and privacy URL.
+- Complete App access (hard paywall: provide reviewer access/instructions), Ads declaration, Content rating, Target audience, News declaration if asked, Health apps declaration, and Data safety.
+- Data safety V1: app-collected reset data stays on-device; disclose Google Play Billing handling as required by current form; declare no ads and no account deletion requirement because there is no account. Recheck against final SDK inventory.
+- Test purchase, restore, pending transaction, expiry, offline startup and reinstall on Play-distributed internal build.
+- Run closed test if the developer account is subject to testing requirements, then request production access.
+- Review and explicitly approve final name, prices, screenshots and production rollout before publishing.
+- Dogfood the human-design gate in `store/7-star-experience.md` on installed onboarding, Today, craving reset, paywall/rescue, loading, empty, error, and reduced-motion states. Record exact template-like/AI-looking feedback and retest fixes before claiming >90% confidence.

@@ -1,0 +1,65 @@
+name: Android release bundle
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'store/**'
+      - 'README.md'
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.4'
+          channel: stable
+          cache: true
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Restore upload key
+        env:
+          UPLOAD_KEYSTORE_BASE64: ${{ secrets.UPLOAD_KEYSTORE_BASE64 }}
+          UPLOAD_STORE_PASSWORD: ${{ secrets.UPLOAD_STORE_PASSWORD }}
+          UPLOAD_KEY_PASSWORD: ${{ secrets.UPLOAD_KEY_PASSWORD }}
+          UPLOAD_KEY_ALIAS: ${{ secrets.UPLOAD_KEY_ALIAS }}
+        run: |
+          test -n "$UPLOAD_KEYSTORE_BASE64"
+          mkdir -p android/keystore
+          printf '%s' "$UPLOAD_KEYSTORE_BASE64" | base64 --decode > android/keystore/breathe-again-upload.jks
+          cat > android/key.properties <<PROPS
+          storePassword=$UPLOAD_STORE_PASSWORD
+          keyPassword=$UPLOAD_KEY_PASSWORD
+          keyAlias=$UPLOAD_KEY_ALIAS
+          storeFile=../keystore/breathe-again-upload.jks
+          PROPS
+      - run: flutter pub get
+      - run: flutter test test/trial_offer_test.dart
+      - name: Build signed app bundle
+        env:
+          GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.workers.max=2
+        run: flutter build appbundle --release --obfuscate --split-debug-info=build/symbols --target-platform android-arm64
+      - name: Compact and re-sign upload bundle
+        env:
+          UPLOAD_STORE_PASSWORD: ${{ secrets.UPLOAD_STORE_PASSWORD }}
+          UPLOAD_KEY_PASSWORD: ${{ secrets.UPLOAD_KEY_PASSWORD }}
+          UPLOAD_KEY_ALIAS: ${{ secrets.UPLOAD_KEY_ALIAS }}
+        run: |
+          AAB=build/app/outputs/bundle/release/app-release.aab
+          zip -d "$AAB" 'BUNDLE-METADATA/com.android.tools.build.debugsymbols/*' 'META-INF/*' >/dev/null
+          jarsigner -sigalg SHA256withRSA -digestalg SHA-256 \
+            -keystore android/keystore/breathe-again-upload.jks \
+            -storepass "$UPLOAD_STORE_PASSWORD" -keypass "$UPLOAD_KEY_PASSWORD" \
+            "$AAB" "$UPLOAD_KEY_ALIAS"
+          jarsigner -verify "$AAB"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sugar-light-release-aab
+          path: build/app/outputs/bundle/release/app-release.aab
+          if-no-files-found: error
+          retention-days: 14

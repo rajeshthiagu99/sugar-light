@@ -1,0 +1,47 @@
+def required_env!(name)
+  value = ENV[name]
+  UI.user_error!("Missing required environment variable: #{name}") if value.to_s.strip.empty?
+  value
+end
+
+def play_credentials
+  {
+    json_key: required_env!("PLAY_SERVICE_ACCOUNT_JSON"),
+    package_name: required_env!("PLAY_PACKAGE_NAME")
+  }
+end
+
+platform :android do
+  desc "Read-only authentication check for the Google Play Developer API"
+  lane :verify_play_api do
+    creds = play_credentials
+    codes = google_play_track_version_codes(
+      json_key: creds[:json_key],
+      package_name: creds[:package_name],
+      track: ENV.fetch("PLAY_VERIFY_TRACK", "internal")
+    )
+    UI.success("Google Play API authenticated. Internal-track version codes: #{codes.inspect}")
+  end
+
+  desc "Build a release Android App Bundle locally; does not upload"
+  lane :build_bundle do
+    sh("flutter", "pub", "get")
+    sh("flutter", "test", "test/trial_offer_test.dart")
+    sh("flutter", "build", "appbundle", "--release")
+  end
+
+  desc "Upload to internal testing only. Never use for production submission."
+  lane :upload_internal do
+    creds = play_credentials
+    upload_to_play_store(
+      json_key: creds[:json_key],
+      package_name: creds[:package_name],
+      track: "internal",
+      aab: "build/app/outputs/bundle/release/app-release.aab",
+      release_status: "draft",
+      skip_upload_metadata: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: true
+    )
+  end
+end

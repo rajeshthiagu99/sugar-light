@@ -1,0 +1,4 @@
+storePassword=<from secure secret store>
+keyPassword=<from secure secret store>
+keyAlias=breathe_again_upload
+storeFile=keystore/breathe-again-upload.jks
