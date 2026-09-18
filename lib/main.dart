@@ -84,7 +84,7 @@ Future<void> openManageSubscription() async {
   await AppAnalytics.log('manage_subscription_opened');
   await launchUrl(
     Uri.parse(
-      'https://play.google.com/store/account/subscriptions?sku=sugar_light_monthly&package=com.rajesht.sugarlight',
+      'https://play.google.com/store/account/subscriptions?sku=sugar_light_premium&package=com.rajesht.sugarlight',
     ),
     mode: LaunchMode.externalApplication,
   );
@@ -101,7 +101,7 @@ Future<void> scheduleTrialReminder() async {
   await notifications.zonedSchedule(
     id: 199,
     title: 'Your trial renews tomorrow',
-    body: 'Your Sugar Light trial renews tomorrow at ₹200/month. Keep going or manage your subscription.',
+    body: 'Your Sugar Light trial renews tomorrow. Keep going or manage your subscription.',
     scheduledDate: tz.TZDateTime.now(tz.local).add(const Duration(days: 2)),
     notificationDetails: const NotificationDetails(
       android: AndroidNotificationDetails(
@@ -510,7 +510,7 @@ class _OnboardingState extends State<Onboarding> {
                         big(
                           '₹${(sugaryItems / 20 * servingCost * 30).round()}',
                         ),
-                        const Text(
+                        Text(
                           'every month',
                           style: TextStyle(color: muted, fontSize: 17),
                         ),
@@ -567,7 +567,7 @@ class _OnboardingState extends State<Onboarding> {
                         ),
                         rowLabel('₹50', '₹1,000'),
                         const SizedBox(height: 12),
-                        const Text(
+                        Text(
                           'Approximate retail prices vary by state, shop and servingCost size.',
                           textAlign: TextAlign.center,
                           style: TextStyle(color: muted, fontSize: 12),
@@ -995,7 +995,7 @@ class SugarIntro extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 42),
-            const Text(
+            Text(
               'One sweet moment.\nOne better swap.',
               style: TextStyle(
                 fontSize: 46,
@@ -1347,7 +1347,7 @@ class _SugarOnboardingState extends State<SugarOnboarding> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Text(
+                              Text(
                                 'MY ONE SWAP',
                                 style: TextStyle(
                                   color: mint,
@@ -1618,7 +1618,7 @@ class _SugarTodayState extends State<SugarToday> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   'TODAY’S ONE SWAP',
                   style: TextStyle(
                     color: mint,
@@ -1674,7 +1674,7 @@ class _SugarTodayState extends State<SugarToday> {
                   ),
                 ),
                 const SizedBox(height: 5),
-                const Text('One tap.', style: TextStyle(color: muted)),
+                Text('One tap.', style: TextStyle(color: muted)),
                 const SizedBox(height: 16),
                 Wrap(
                   spacing: 8,
@@ -1756,8 +1756,13 @@ class Paywall extends StatefulWidget {
 class _PaywallState extends State<Paywall> {
   bool busy = false;
   bool allowPop = false;
-  GooglePlayProductDetails? trialProduct;
-  String? trialOfferToken;
+  GooglePlayProductDetails? annualTrialProduct;
+  String? annualTrialOfferToken;
+  GooglePlayProductDetails? monthlyTrialProduct;
+  String? monthlyTrialOfferToken;
+  bool annualSelected = true;
+  String annualPrice = '₹999';
+  String monthlyPrice = '₹200';
   GooglePlayProductDetails? rescueProduct;
   String? rescueOfferToken;
   String rescueFirstPrice = '₹799';
@@ -1781,7 +1786,7 @@ class _PaywallState extends State<Paywall> {
   Future<void> _load() async {
     if (await InAppPurchase.instance.isAvailable()) {
       final r = await InAppPurchase.instance.queryProductDetails({
-        'sugar_light_monthly',
+        'sugar_light_premium',
       });
       final androidProducts = r.productDetails
           .whereType<GooglePlayProductDetails>();
@@ -1809,8 +1814,21 @@ class _PaywallState extends State<Paywall> {
           continue;
         }
         if (hasRequiredTrial(phases)) {
-          trialProduct = product;
-          trialOfferToken = offer.offerIdToken;
+          final recurring = offer.pricingPhases.where(
+            (p) => p.priceAmountMicros > 0,
+          );
+          if (recurring.isEmpty) continue;
+          if (offer.basePlanId == 'annual' &&
+              recurring.first.billingPeriod == 'P1Y') {
+            annualTrialProduct = product;
+            annualTrialOfferToken = offer.offerIdToken;
+            annualPrice = recurring.first.formattedPrice;
+          } else if (offer.basePlanId == 'monthly' &&
+              recurring.first.billingPeriod == 'P1M') {
+            monthlyTrialProduct = product;
+            monthlyTrialOfferToken = offer.offerIdToken;
+            monthlyPrice = recurring.first.formattedPrice;
+          }
           await AppAnalytics.log('trial_offer_available', {
             'offer_id': offer.offerId ?? 'trial',
             'base_plan_id': offer.basePlanId,
@@ -1838,8 +1856,10 @@ class _PaywallState extends State<Paywall> {
   }
 
   Future<void> buy() async {
-    final product = trialProduct;
-    final token = trialOfferToken;
+    final product = annualSelected ? annualTrialProduct : monthlyTrialProduct;
+    final token = annualSelected
+        ? annualTrialOfferToken
+        : monthlyTrialOfferToken;
     if (product == null || token == null) {
       await AppAnalytics.log('trial_offer_unavailable_blocked');
       if (mounted)
@@ -1854,6 +1874,7 @@ class _PaywallState extends State<Paywall> {
     }
     setState(() => busy = true);
     await AppAnalytics.log('paywall_offer_selected', {
+      'plan': annualSelected ? 'annual' : 'monthly',
       'offer_token_present': true,
       'placement': 'post_personalized_preview',
     });
@@ -1925,8 +1946,10 @@ class _PaywallState extends State<Paywall> {
               onTap: busy ? null : buy,
             ),
             const SizedBox(height: 8),
-            const Text(
-              'Then ₹200/month. Cancel anytime in Google Play.',
+            Text(
+              annualSelected
+                  ? 'Then $annualPrice/year. Cancel anytime in Google Play.'
+                  : 'Then $monthlyPrice/month. Cancel anytime in Google Play.',
               textAlign: TextAlign.center,
               style: TextStyle(color: muted, fontSize: 12),
             ),
@@ -1955,7 +1978,7 @@ class _PaywallState extends State<Paywall> {
               children: [
                 const Center(child: LeafMark()),
                 const SizedBox(height: 26),
-                const Text(
+                Text(
                   'Make the next sweet moment easier.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
@@ -1966,7 +1989,7 @@ class _PaywallState extends State<Paywall> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                const Text(
+                Text(
                   'Commit in the morning. Log the moment. Learn at night.',
                   textAlign: TextAlign.center,
                   style: TextStyle(color: muted, fontSize: 17),
@@ -2019,45 +2042,20 @@ class _PaywallState extends State<Paywall> {
                   ),
                 ),
                 const SizedBox(height: 8),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: mint.withOpacity(.10),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: mint, width: 2),
-                  ),
-                  child: const Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Monthly',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 17,
-                              ),
-                            ),
-                            SizedBox(height: 8),
-                            Text(
-                              '₹200',
-                              style: TextStyle(
-                                fontSize: 30,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                            Text(
-                              'per month after trial',
-                              style: TextStyle(color: muted, fontSize: 13),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Icon(Icons.check_circle_rounded, color: mint, size: 28),
-                    ],
-                  ),
+                _SugarPlanCard(
+                  title: 'Annual',
+                  price: '$annualPrice / year',
+                  detail: 'Best value',
+                  selected: annualSelected,
+                  onTap: () => setState(() => annualSelected = true),
+                ),
+                const SizedBox(height: 10),
+                _SugarPlanCard(
+                  title: 'Monthly',
+                  price: '$monthlyPrice / month',
+                  detail: 'Flexible billing',
+                  selected: !annualSelected,
+                  onTap: () => setState(() => annualSelected = false),
                 ),
                 const SizedBox(height: 18),
                 Container(
@@ -2095,6 +2093,70 @@ class _PaywallState extends State<Paywall> {
             ),
           ],
         ),
+      ),
+    ),
+  );
+}
+
+class _SugarPlanCard extends StatelessWidget {
+  final String title, price, detail;
+  final bool selected;
+  final VoidCallback onTap;
+  const _SugarPlanCard({
+    required this.title,
+    required this.price,
+    required this.detail,
+    required this.selected,
+    required this.onTap,
+  });
+  @override
+  Widget build(BuildContext context) => InkWell(
+    onTap: onTap,
+    borderRadius: BorderRadius.circular(20),
+    child: Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: selected ? mint.withOpacity(.10) : Colors.white.withOpacity(.45),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: selected ? mint : const Color(0x22000000),
+          width: selected ? 2 : 1,
+        ),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 17,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  price,
+                  style: const TextStyle(
+                    fontSize: 30,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                Text(
+                  detail,
+                  style: const TextStyle(color: muted, fontSize: 13),
+                ),
+              ],
+            ),
+          ),
+          Icon(
+            selected ? Icons.check_circle_rounded : Icons.circle_outlined,
+            color: mint,
+            size: 28,
+          ),
+        ],
       ),
     ),
   );
@@ -2260,7 +2322,7 @@ class _HomeState extends State<Home> {
             children: [
               const LeafMark(small: true),
               const SizedBox(width: 10),
-              const Text(
+              Text(
                 'Sugar Light',
                 style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
               ),
@@ -2388,7 +2450,7 @@ class _HomeState extends State<Home> {
                   ],
                 ),
                 const SizedBox(height: 6),
-                const Text(
+                Text(
                   'Log it. Your totals adjust instantly.',
                   style: TextStyle(color: muted, height: 1.35),
                 ),
@@ -2449,7 +2511,7 @@ class _HomeState extends State<Home> {
                   ],
                 ),
                 const SizedBox(height: 14),
-                const Text(
+                Text(
                   'Small choices are adding up',
                   style: TextStyle(fontSize: 15),
                 ),
@@ -2464,7 +2526,7 @@ class _HomeState extends State<Home> {
                   ),
                 ),
                 const SizedBox(height: 9),
-                const Text(
+                Text(
                   'Next: plan one satisfying swap',
                   style: TextStyle(color: muted, fontSize: 13),
                 ),
